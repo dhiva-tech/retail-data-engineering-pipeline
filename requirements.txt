@@ -1,3 +1,2 @@
-apache-airflow==2.10.5
-pandas==2.2.0
-# Add other lightweight Python libs here (avoid pyspark in Airflow image)
+pyspark==3.5.1
+delta-spark==3.2.0
