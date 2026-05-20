@@ -30,6 +30,9 @@ SCD Type 2 Tracking
     ↓
 Gold Layer (Fact & Dimension Tables)
 
+
+![alt text](architecture.png)
+
 ---
 
 # Technologies Used
