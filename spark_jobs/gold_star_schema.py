@@ -1,6 +1,7 @@
 
 from pyspark.sql import SparkSession
 from delta import configure_spark_with_delta_pip
+import os
 import warnings
 warnings.filterwarnings("ignore")
 # =====================================================
@@ -21,7 +22,14 @@ spark.sparkContext.setLogLevel("ERROR")
 # READ SILVER LAYER
 # =====================================================
 
-silver_df = spark.read.format("delta").load("delta/silver/retail_sales")
+delta_base_path = os.getenv("DELTA_BASE_PATH", "delta")
+silver_path = os.path.join(delta_base_path, "silver", "retail_sales")
+dim_customer_path = os.path.join(delta_base_path, "gold", "dim_customer")
+dim_product_path = os.path.join(delta_base_path, "gold", "dim_product")
+dim_date_path = os.path.join(delta_base_path, "gold", "dim_date")
+fact_sales_path = os.path.join(delta_base_path, "gold", "fact_sales")
+
+silver_df = spark.read.format("delta").load(silver_path)
 
 # Create Temp View
 silver_df.createOrReplaceTempView("silver_retail")
@@ -158,28 +166,28 @@ FROM fact_cte
     dim_customer.write
     .format("delta")
     .mode("overwrite")
-    .save("delta/gold/dim_customer")
+    .save(dim_customer_path)
 )
 
 (
     dim_product.write
     .format("delta")
     .mode("overwrite")
-    .save("delta/gold/dim_product")
+    .save(dim_product_path)
 )
 
 (
     dim_date.write
     .format("delta")
     .mode("overwrite")
-    .save("delta/gold/dim_date")
+    .save(dim_date_path)
 )
 
 (
     fact_sales.write
     .format("delta")
     .mode("overwrite")
-    .save("delta/gold/fact_sales")
+    .save(fact_sales_path)
 )
 
 # =====================================================

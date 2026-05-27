@@ -4,6 +4,8 @@ __pycache__/
 
 delta/
 logs/
+airflow/logs/*
+!airflow/logs/.gitkeep
 
 .metastore/
 spark-warehouse/

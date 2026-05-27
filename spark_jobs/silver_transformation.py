@@ -12,6 +12,7 @@ from pyspark.sql.functions import (
     try_to_timestamp
 )
 from delta import configure_spark_with_delta_pip
+import os
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -27,7 +28,11 @@ spark = configure_spark_with_delta_pip(builder).getOrCreate()
 spark.sparkContext.setLogLevel("ERROR")
 
 # Read Bronze Delta Table
-df = spark.read.format("delta").load("delta/bronze/retail_sales")
+delta_base_path = os.getenv("DELTA_BASE_PATH", "delta")
+bronze_path = os.path.join(delta_base_path, "bronze", "retail_sales")
+silver_path = os.path.join(delta_base_path, "silver", "retail_sales")
+
+df = spark.read.format("delta").load(bronze_path)
 
 # Convert date column to proper datatype
 
@@ -122,7 +127,7 @@ df.show(3, truncate=False, vertical=True)
     .format("delta")
     .mode("overwrite")
     .option("overwriteSchema", "true")
-    .save("delta/silver/retail_sales")
+    .save(silver_path)
 )
 
 print("Silver layer created successfully!")

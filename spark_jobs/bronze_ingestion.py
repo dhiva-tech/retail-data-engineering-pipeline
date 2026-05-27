@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_timestamp, input_file_name
 from delta import configure_spark_with_delta_pip
+import os
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -14,6 +15,9 @@ builder = (
 
 spark = configure_spark_with_delta_pip(builder).getOrCreate()
 spark.sparkContext.setLogLevel("ERROR")
+
+delta_base_path = os.getenv("DELTA_BASE_PATH", "delta")
+bronze_path = os.path.join(delta_base_path, "bronze", "retail_sales")
 
 # Read CSV file
 df = (
@@ -50,6 +54,9 @@ required_columns = [
 
 df = df.select(*required_columns)
 
+# Remove duplicate source records by business key
+df = df.dropDuplicates(["transaction_id"])
+
 # Add ingestion timestamp
 df = df.withColumn(
     "ingestion_timestamp",
@@ -70,15 +77,18 @@ df.printSchema()
 print("\nBronze Data:")
 df.show(3, truncate=False, vertical=True)
 
-# Write Bronze Delta Table
-(
-    df.write
-    .format("delta")
-    .mode("overwrite")
-    .option("overwriteSchema", "true")
-    .save("delta/bronze/retail_sales")
-)
+if os.path.exists(bronze_path):
+    print("Bronze table already exists. Skipping initial overwrite load.")
+else:
+    # Write Bronze Delta Table
+    (
+        df.write
+        .format("delta")
+        .mode("overwrite")
+        .option("overwriteSchema", "true")
+        .save(bronze_path)
+    )
 
-print("Bronze layer created successfully!")
+    print("Bronze initial load created successfully!")
 
 spark.stop()

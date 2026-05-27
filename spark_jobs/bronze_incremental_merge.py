@@ -18,7 +18,14 @@ spark = configure_spark_with_delta_pip(builder).getOrCreate()
 spark.sparkContext.setLogLevel("ERROR")
 
 # Bronze path
-bronze_path = "delta/bronze/retail_sales"
+delta_base_path = os.getenv("DELTA_BASE_PATH", "delta")
+bronze_path = os.path.join(delta_base_path, "bronze", "retail_sales")
+incremental_file_path = "data/retail_sales_incremental.csv"
+source_file_path = (
+    incremental_file_path
+    if os.path.exists(incremental_file_path)
+    else "data/retail_sales.csv"
+)
 
 # Read CSV
 df = (
@@ -26,7 +33,7 @@ df = (
     .format("csv")
     .option("header", "true")
     .option("inferSchema", "true")
-    .load("data/retail_sales.csv")
+    .load(source_file_path)
 )
 
 # Clean column names
@@ -55,6 +62,9 @@ required_columns = [
 
 df = df.select(*required_columns)
 
+# Keep one source row per business key before merge
+df = df.dropDuplicates(["transaction_id"])
+
 # Add audit columns
 df = df.withColumn(
     "ingestion_timestamp",
@@ -76,7 +86,7 @@ if not os.path.exists(bronze_path):
         .save(bronze_path)
     )
 
-    print("Initial Bronze Load Completed!")
+    print(f"Initial Bronze Load Completed from {source_file_path}!")
 
 # Incremental MERGE
 else:
@@ -94,12 +104,39 @@ else:
             df.alias("source"),
             "target.transaction_id = source.transaction_id"
         )
-        .whenMatchedUpdateAll()
-        .whenNotMatchedInsertAll()
+        .whenMatchedUpdate(
+            set={
+                "date": "source.date",
+                "gender": "source.gender",
+                "age": "source.age",
+                "age_group": "source.age_group",
+                "product_category": "source.product_category",
+                "quantity": "source.quantity",
+                "price_per_unit": "source.price_per_unit",
+                "total_amount": "source.total_amount",
+                "ingestion_timestamp": "source.ingestion_timestamp",
+                "source_file": "source.source_file"
+            }
+        )
+        .whenNotMatchedInsert(
+            values={
+                "transaction_id": "source.transaction_id",
+                "date": "source.date",
+                "gender": "source.gender",
+                "age": "source.age",
+                "age_group": "source.age_group",
+                "product_category": "source.product_category",
+                "quantity": "source.quantity",
+                "price_per_unit": "source.price_per_unit",
+                "total_amount": "source.total_amount",
+                "ingestion_timestamp": "source.ingestion_timestamp",
+                "source_file": "source.source_file"
+            }
+        )
         .execute()
     )
 
-    print("Incremental MERGE Completed Successfully!")
+    print(f"Incremental MERGE Completed Successfully from {source_file_path}!")
 
 # Read final Bronze table
 final_df = spark.read.format("delta").load(bronze_path)

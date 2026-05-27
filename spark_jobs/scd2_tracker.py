@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import current_date, lit
+from pyspark.sql.functions import col, current_date, lit
 from delta import configure_spark_with_delta_pip
 from delta.tables import DeltaTable
 import os
@@ -18,7 +18,11 @@ spark = configure_spark_with_delta_pip(builder).getOrCreate()
 spark.sparkContext.setLogLevel("ERROR")
 
 # Read Silver Layer
-source_df = spark.read.format("delta").load("delta/silver/retail_sales")
+delta_base_path = os.getenv("DELTA_BASE_PATH", "delta")
+silver_path = os.path.join(delta_base_path, "silver", "retail_sales")
+scd2_path = os.path.join(delta_base_path, "gold", "retail_history")
+
+source_df = spark.read.format("delta").load(silver_path)
 
 # Enable automatic schema evolution
 spark.conf.set(
@@ -33,9 +37,6 @@ source_df = (
     .withColumn("end_date", lit(None).cast("date"))
     .withColumn("is_active", lit(True).cast("boolean"))
 )
-
-# SCD2 table path
-scd2_path = "delta/gold/retail_history"
 
 # Initial Load
 if not os.path.exists(scd2_path):
@@ -57,13 +58,19 @@ else:
 
     spark.catalog.clearCache()
 
-
     delta_table = DeltaTable.forPath(
         spark,
         scd2_path
     )
 
-    # Expire old records if changes detected
+    change_condition = """
+        target.product_category <> source.product_category
+        OR target.quantity <> source.quantity
+        OR target.price_per_unit <> source.price_per_unit
+        OR target.total_amount <> source.total_amount
+    """
+
+    # Expire old active records if changes are detected
     (
         delta_table.alias("target")
         .merge(
@@ -74,11 +81,7 @@ else:
             """
         )
         .whenMatchedUpdate(
-            condition="""
-                target.product_category <> source.product_category
-                OR target.quantity <> source.quantity
-                OR target.total_amount <> source.total_amount
-            """,
+            condition=change_condition,
             set={
                 "is_active": "false",
                 "end_date": "current_date()"
@@ -87,18 +90,30 @@ else:
         .execute()
     )
 
-    # Insert new active records
-    (
-        delta_table.alias("target")
-        .merge(
-            source_df.alias("source"),
-            """
-            target.transaction_id = source.transaction_id
-            AND target.is_active = true
-            """
+    current_active_df = (
+        spark.read
+        .format("delta")
+        .load(scd2_path)
+        .filter(col("is_active") == lit(True))
+        .select("transaction_id")
+    )
+
+    new_active_df = (
+        source_df.alias("source")
+        .join(
+            current_active_df.alias("target"),
+            on="transaction_id",
+            how="left_anti"
         )
-        .whenNotMatchedInsertAll()
-        .execute()
+    )
+
+    # Insert brand-new records and changed records as new active versions
+    (
+        new_active_df.write
+        .format("delta")
+        .mode("append")
+        .option("mergeSchema", "true")
+        .save(scd2_path)
     )
 
     print("SCD Type 2 MERGE Completed!")
