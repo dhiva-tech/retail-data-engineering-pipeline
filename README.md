@@ -456,7 +456,7 @@ This project demonstrates practical fresher-level data engineering skills:
 Suggested resume line:
 
 ```text
-Built an end-to-end retail data engineering pipeline using PySpark, Delta Lake, Airflow, and Docker, implementing Medallion Architecture, incremental loading, SCD Type 2 tracking, and Gold layer star schema modeling.
+Built a Dockerized retail data pipeline using PySpark, Delta Lake, and Airflow to process raw CSV data through Bronze, Silver, and Gold layers with incremental loading, SCD Type 2 tracking, and star schema outputs.
 ```
 
 ---
