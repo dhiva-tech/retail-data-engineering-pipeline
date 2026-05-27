@@ -453,7 +453,7 @@ This project demonstrates practical fresher-level data engineering skills:
 - Orchestrating jobs with Airflow
 - Running the full project through Docker Compose
 
-Suggested resume line:
+
 
 ```text
 Built a Dockerized retail data pipeline using PySpark, Delta Lake, and Airflow to process raw CSV data through Bronze, Silver, and Gold layers with incremental loading, SCD Type 2 tracking, and star schema outputs.
